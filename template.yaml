@@ -1,0 +1,129 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  cloud-resume-challenge-2
+
+  Sample SAM Template for cloud-resume-challenge-2
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 60
+
+Resources:
+  GetFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: get-function/
+      Handler: get.lambda_handler
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+      Events:
+        MyApi:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /get
+            Method: get
+
+# Creating S3 Bucket and making it public access
+  MyWebsiteS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: tc-website-s3
+      AccessControl: PublicRead
+      WebsiteConfiguration:
+        IndexDocument: index.html
+    
+# Defining our S3 BucketPolicy to allow Public Access
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      PolicyDocument:
+        Id: MyPolicy
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublicReadForGetBucketObjects
+            Effect: Allow
+            Principal: "*"
+            Action: 
+              - 's3:GetObject'
+              - 's3:GetObjectVersion'
+            Resource: !Join
+              - ""
+              - - "arn:aws:s3:::"
+                - !Ref MyWebsiteS3Bucket
+                - /*
+      Bucket: !Ref MyWebsiteS3Bucket  
+
+# Creating CloudFront Distribution or CDN (Content Distribution Network)
+  MyDistribution:
+    Type: 'AWS::CloudFront::Distribution'
+    Properties:
+      DistributionConfig:
+        Origins:
+          - DomainName: tc-website-s3.s3.us-east-1.amazonaws.com
+            Id: tc-website-s3.s3.us-east-1.amazonaws.com
+            CustomOriginConfig:
+              OriginProtocolPolicy: match-viewer
+        DefaultRootObject: index.html
+        Enabled: true
+        DefaultCacheBehavior:
+          DefaultTTL: 0
+          MinTTL: 0
+          MaxTTL: 0
+          ForwardedValues:
+            QueryString: false
+          TargetOriginId: tc-website-s3.s3.us-east-1.amazonaws.com
+          ViewerProtocolPolicy: redirect-to-https
+        ViewerCertificate:
+          AcmCertificateArn: !Ref MyCertificate
+          SslSupportMethod: sni-only
+        Aliases:
+          - tc-resume.com
+
+# route53 record set
+  MyRoute53Record:
+    Type: "AWS::Route53::RecordSetGroup"
+    Properties:
+      HostedZoneId: Z02499693CTQBUYU870Y6
+      RecordSets:
+        - Name: tc-resume.com
+          Type: A
+          AliasTarget:
+            HostedZoneId: Z2FDTNDATAQYW2
+            DNSName: !GetAtt MyDistribution.DomainName
+
+# Certificate I made in ACM (Amazon Certificate Manager)
+  MyCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: tc-resume.com
+      ValidationMethod: DNS
+
+# Creating DynamoDB to store our website's visitor count
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: cloud-resume-dynamo
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: "ID"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "ID"
+          KeyType: "HASH"          
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  HelloWorldApi:
+    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+  GetFunction:
+    Description: "Hello World Lambda Function ARN"
+    Value: !GetAtt GetFunction.Arn
+  GetFunctionIamRole:
+    Description: "Implicit IAM Role created for Hello World function"
+    Value: !GetAtt GetFunctionRole.Arn
