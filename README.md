@@ -1,3 +1,5 @@
+# deprecated repository
+This repository is deprecated. Retaining code but I have migrated this project to terraform existing in another repo.
 # cloud-resume-challenge
 This repository contains my submission for the Cloud Resume Challenge. The challenge involves creating a static website that showcases my resume and deploying it to the cloud using AWS.
 ## Files
